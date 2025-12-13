@@ -1,11 +1,12 @@
 import express from "express";
+import authRoutes from "./routes/auth.routes";
 
 const app = express();
 
-// Middleware
 app.use(express.json());
 
-// Health check route
+app.use("/api/auth", authRoutes);
+
 app.get("/", (_req, res) => {
 	res.send("API is running 🚀");
 });
