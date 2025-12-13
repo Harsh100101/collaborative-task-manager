@@ -1,13 +1,24 @@
 import mongoose from "mongoose";
 import { taskRepository } from "../repositories/task.repository";
+import { getIO } from "../socket";
 
 export const taskService = {
 	async createTask(data: any, creatorId: string) {
-		return taskRepository.create({
+		const task = await taskRepository.create({
 			...data,
 			creatorId: new mongoose.Types.ObjectId(creatorId),
 			assignedToId: new mongoose.Types.ObjectId(data.assignedToId),
 		});
+
+		const io = getIO();
+
+		// 🔔 Notify assigned user (personal room)
+		io.to(data.assignedToId).emit("task:assigned", task);
+
+		// 🔔 Broadcast task creation to all
+		io.emit("task:created", task);
+
+		return task;
 	},
 
 	async getTasks(userId: string, query: any) {
@@ -23,12 +34,15 @@ export const taskService = {
 		return taskRepository.findAll(filter);
 	},
 
-	// 👇 KEEP STRING HERE
 	async updateTask(taskId: string, data: any) {
-		return taskRepository.updateById(taskId, data);
+		const task = await taskRepository.updateById(taskId, data);
+
+		const io = getIO();
+		io.emit("task:updated", task);
+
+		return task;
 	},
 
-	// 👇 KEEP STRING HERE
 	async deleteTask(taskId: string) {
 		return taskRepository.deleteById(taskId);
 	},
