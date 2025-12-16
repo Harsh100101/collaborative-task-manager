@@ -1,14 +1,24 @@
 import { Task } from "../models/task.model";
+import { ITask } from "../models/task.model";
 
 export const taskRepository = {
-	create: (data: any) => Task.create(data),
+	create(data: Partial<ITask>) {
+		return Task.create(data);
+	},
 
-	findAll: (filter: any) => Task.find(filter).sort({ dueDate: 1 }),
+	findAll(filter: any) {
+		return Task.find(filter).sort({ createdAt: -1 });
+	},
 
-	findById: (id: string) => Task.findById(id),
+	findById(id: string) {
+		return Task.findById(id);
+	},
 
-	updateById: (id: string, data: any) =>
-		Task.findByIdAndUpdate(id, data, { new: true }),
+	updateById(id: string, data: Partial<ITask>) {
+		return Task.findByIdAndUpdate(id, data, { new: true });
+	},
 
-	deleteById: (id: string) => Task.findByIdAndDelete(id),
+	deleteById(id: string) {
+		return Task.findByIdAndDelete(id);
+	},
 };

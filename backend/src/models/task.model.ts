@@ -3,11 +3,14 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface ITask extends Document {
 	title: string;
 	description?: string;
-	dueDate: Date;
-	priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 	status: "TODO" | "IN_PROGRESS" | "REVIEW" | "COMPLETED";
+	priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+	dueDate: Date;
 	creatorId: mongoose.Types.ObjectId;
 	assignedToId: mongoose.Types.ObjectId;
+	position: number;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 const TaskSchema = new Schema<ITask>(
@@ -35,6 +38,7 @@ const TaskSchema = new Schema<ITask>(
 			ref: "User",
 			required: true,
 		},
+		position: { type: Number, default: 0 },
 	},
 	{ timestamps: true }
 );
