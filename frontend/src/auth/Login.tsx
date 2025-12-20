@@ -23,7 +23,7 @@ export default function Login() {
 				password,
 			});
 
-			login(res.data);
+			login(res.data.user);
 			navigate("/dashboard");
 		} catch (err) {
 			const error = err as AxiosError<{ message: string }>;
