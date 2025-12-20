@@ -1,4 +1,4 @@
-import { socket } from "../api/socket";
+import socket from "../api/socket";
 import type { DragStartEvent, DragOverEvent } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { useEffect, useState } from "react";
@@ -124,7 +124,7 @@ export default function Dashboard() {
 	}, []);
 
 	useEffect(() => {
-		socket.on("task:created", (task) => {
+		socket.on("task:created", (task: Task) => {
 			setTasks((prev) => {
 				// 🔐 Prevent duplicate task
 				if (prev.some((t) => t._id === task._id)) {
@@ -134,13 +134,13 @@ export default function Dashboard() {
 			});
 		});
 
-		socket.on("task:updated", (task) => {
+		socket.on("task:updated", (task: Task) => {
 			setTasks((prev) =>
 				prev.map((t) => (t._id === task._id ? task : t))
 			);
 		});
 
-		socket.on("task:deleted", (taskId) => {
+		socket.on("task:deleted", (taskId: string) => {
 			setTasks((prev) => prev.filter((t) => t._id !== taskId));
 		});
 
