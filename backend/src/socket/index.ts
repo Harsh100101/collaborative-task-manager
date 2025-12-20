@@ -1,13 +1,25 @@
 import { Server } from "socket.io";
 import http from "http";
 
-
 let io: Server;
 
 export const initSocket = (server: http.Server) => {
+	const allowedOrigins = [
+		"http://localhost:5173",
+		"https://collaborative-task-manager.vercel.app",
+		/\.vercel\.app$/,
+	];
+
 	io = new Server(server, {
 		cors: {
-			origin: "http://localhost:5173",
+			origin: (origin, callback) => {
+				if (!origin) return callback(null, true);
+				const isAllowed = allowedOrigins.some((o) =>
+					o instanceof RegExp ? o.test(origin) : o === origin
+				);
+				if (isAllowed) callback(null, true);
+				else callback(new Error("Socket CORS not allowed"), false);
+			},
 			credentials: true,
 		},
 	});
@@ -33,4 +45,3 @@ export const getIO = () => {
 	}
 	return io;
 };
-

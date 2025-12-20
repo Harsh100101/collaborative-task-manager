@@ -31,10 +31,15 @@ export const login = async (req: Request, res: Response) => {
 			parsed.password
 		);
 
+		const isProd = process.env.NODE_ENV === "production";
+
+		// For cross-site cookies (frontend and backend on different origins),
+		// you must set sameSite: 'none' and secure: true in production.
 		res.cookie("token", token, {
 			httpOnly: true,
-			sameSite: "lax",
-			secure: false,
+			sameSite: isProd ? "none" : "lax",
+			secure: isProd ? true : false,
+			// optionally set `maxAge` or `expires` here
 		});
 
 		res.json({
