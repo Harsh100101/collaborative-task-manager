@@ -9,7 +9,11 @@ const app = express();
 // ✅ CORS (use env for production)
 app.use(
 	cors({
-		origin: process.env.CLIENT_URL || "http://localhost:5173",
+		origin: [
+			"http://localhost:5173",
+			"https://collaborative-task-manager.vercel.app",
+			/\.vercel\.app$/, // ✅ allows ALL Vercel preview deployments
+		],
 		credentials: true,
 	})
 );
