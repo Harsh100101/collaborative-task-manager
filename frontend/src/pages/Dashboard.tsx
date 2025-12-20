@@ -126,8 +126,10 @@ export default function Dashboard() {
 	useEffect(() => {
 		socket.on("task:created", (task) => {
 			setTasks((prev) => {
-				// ✅ prevent duplicates
-				if (prev.some((t) => t._id === task._id)) return prev;
+				// 🔐 Prevent duplicate task
+				if (prev.some((t) => t._id === task._id)) {
+					return prev;
+				}
 				return [task, ...prev];
 			});
 		});
@@ -138,12 +140,14 @@ export default function Dashboard() {
 			);
 		});
 
+		socket.on("task:deleted", (taskId) => {
+			setTasks((prev) => prev.filter((t) => t._id !== taskId));
+		});
+
 		return () => {
 			socket.off("task:created");
 			socket.off("task:updated");
-			socket.on("task:deleted", (taskId: string) => {
-				setTasks((prev) => prev.filter((t) => t._id !== taskId));
-			});
+			socket.off("task:deleted");
 		};
 	}, []);
 

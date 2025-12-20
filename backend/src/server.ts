@@ -11,7 +11,7 @@ const server = http.createServer(app);
 
 // ✅ Connect database BEFORE server starts
 connectDB();
-
+	
 // 🔔 Initialize socket AFTER server is created
 initSocket(server);
 

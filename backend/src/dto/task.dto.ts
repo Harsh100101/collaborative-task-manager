@@ -6,7 +6,6 @@ export const createTaskDto = z.object({
 	dueDate: z.string(),
 	priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
 	assignedToId: z.string(),
-	workspaceId: z.string(),
 });
 
 export const updateTaskDto = z.object({

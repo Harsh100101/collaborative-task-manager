@@ -11,7 +11,6 @@ interface Task {
 	priority: TaskPriority;
 	status: TaskStatus;
 	dueDate: string;
-	workspaceId: string;
 }
 
 interface Props {

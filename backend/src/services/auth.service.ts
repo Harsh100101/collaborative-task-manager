@@ -1,6 +1,27 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { userRepository } from "../repositories/user.repository";
+import type { RegisterDtoType } from "../dto/auth.dto";
+import { User } from "../models/User";
+
+export const registerUser = async (data: RegisterDtoType) => {
+	const { name, email, password } = data;
+
+	const existingUser = await User.findOne({ email });
+	if (existingUser) {
+		throw new Error("User already exists");
+	}
+
+	const hashedPassword = await bcrypt.hash(password, 10);
+
+	const user = await User.create({
+		name,
+		email,
+		password: hashedPassword,
+	});
+
+	return user;
+};
 
 export const authService = {
 	async register(name: string, email: string, password: string) {

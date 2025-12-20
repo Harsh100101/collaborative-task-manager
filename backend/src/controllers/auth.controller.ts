@@ -1,24 +1,24 @@
 import { Request, Response } from "express";
 import { authService } from "../services/auth.service";
-import { registerDto, loginDto } from "../dto/auth.dto";
+import { RegisterDto, loginDto } from "../dto/auth.dto";
+import { registerUser } from "../services/auth.service";
 
 export const register = async (req: Request, res: Response) => {
 	try {
-		const parsed = registerDto.parse(req.body);
-
-		const user = await authService.register(
-			parsed.name,
-			parsed.email,
-			parsed.password
-		);
+		const user = await registerUser(req.body);
 
 		res.status(201).json({
-			id: user._id,
-			name: user.name,
-			email: user.email,
+			message: "User registered successfully",
+			user: {
+				id: user._id,
+				name: user.name,
+				email: user.email,
+			},
 		});
 	} catch (error: any) {
-		res.status(400).json({ message: error.message });
+		res.status(400).json({
+			message: error.message || "Registration failed",
+		});
 	}
 };
 

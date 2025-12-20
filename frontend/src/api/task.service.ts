@@ -31,6 +31,7 @@ export const taskService = {
 			status?: "TODO" | "IN_PROGRESS" | "REVIEW" | "COMPLETED";
 			priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 			dueDate?: string;
+			position?: number; 
 		}
 	) => api.patch(`/tasks/${id}`, data),
 };
