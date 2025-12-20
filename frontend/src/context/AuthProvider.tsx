@@ -1,27 +1,35 @@
-import { useState } from "react";
-import type { ReactNode } from "react";
+import React, { useState, useEffect } from "react";
 import { AuthContext, type User } from "./AuthContext";
-
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+	children,
+}) => {
 	const [user, setUser] = useState<User | null>(() => {
 		try {
-			const storedUser = localStorage.getItem("user");
-			if (!storedUser || storedUser === "undefined") return null;
-			return JSON.parse(storedUser);
+			const raw = localStorage.getItem("user");
+			return raw ? (JSON.parse(raw) as User) : null;
 		} catch {
-			localStorage.removeItem("user");
 			return null;
 		}
 	});
 
-	const login = (user: User) => {
-		localStorage.setItem("user", JSON.stringify(user));
-		setUser(user);
+	useEffect(() => {
+		console.log("AuthProvider mounted - user:", user);
+	}, [user]);
+
+	const login = (u: User) => {
+		console.log("AuthProvider.login ->", u);
+		setUser(u);
+		try {
+			localStorage.setItem("user", JSON.stringify(u));
+		} catch (e) {
+			console.warn("Failed to persist user:", e);
+		}
 	};
 
 	const logout = () => {
-		localStorage.removeItem("user");
 		setUser(null);
+		localStorage.removeItem("user");
+		localStorage.removeItem("token");
 	};
 
 	return (

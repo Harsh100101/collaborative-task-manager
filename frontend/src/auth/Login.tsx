@@ -18,15 +18,34 @@ export default function Login() {
 		setError("");
 
 		try {
-			const res = await authService.login({
+			// authService.login returns res.data (the response body)
+			const data = await authService.login({
 				email,
 				password,
 			});
 
-			login(res.data.user);
+			console.log("LOGIN RESPONSE BODY:", data);
+
+			// handle common possible shapes:
+			// 1) { user, token }
+			// 2) { id, name, email }  (your current backend)
+			const user = data.user ?? data; // if backend returns { user: {...} } use that, otherwise assume data is the user
+
+			// store token only if backend returned one
+			if (data.token) {
+				localStorage.setItem("token", data.token);
+			}
+
+			// update auth context with the actual user object
+			login(user);
 			navigate("/dashboard");
 		} catch (err) {
 			const error = err as AxiosError<{ message: string }>;
+			console.error(
+				"LOGIN ERROR:",
+				error.response?.status,
+				error.response?.data || error.message
+			);
 			setError(error.response?.data?.message || "Login failed");
 		}
 	};

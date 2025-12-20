@@ -1,11 +1,10 @@
+import React, { useEffect, useRef, useState } from "react";
 import socket from "../api/socket";
-import type { DragStartEvent, DragOverEvent } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
-import { useEffect, useState } from "react";
-import { useAuth } from "../context/useAuth";
-import { useNavigate } from "react-router-dom";
-import { taskService } from "../api/task.service";
-import TaskModal from "../components/TaskModal";
+import type {
+	DragStartEvent,
+	DragOverEvent,
+	DragEndEvent,
+} from "@dnd-kit/core";
 import {
 	DndContext,
 	useDroppable,
@@ -16,13 +15,17 @@ import {
 	closestCenter,
 	DragOverlay,
 } from "@dnd-kit/core";
-
 import {
 	SortableContext,
 	useSortable,
 	verticalListSortingStrategy,
 	arrayMove,
 } from "@dnd-kit/sortable";
+
+import { useAuth } from "../context/useAuth";
+import { useNavigate } from "react-router-dom";
+import { taskService } from "../api/task.service";
+import TaskModal from "../components/TaskModal";
 
 interface Task {
 	_id: string;
@@ -48,13 +51,11 @@ function DroppableColumn({
 	return (
 		<div
 			ref={setNodeRef}
-			className={`space-y-3 min-h-[120px] p-2 rounded transition-colors
-				${
-					isOver
-						? "bg-blue-900/30 border-2 border-blue-500"
-						: "border-2 border-transparent"
-				}
-			`}
+			className={`space-y-3 min-h-[120px] p-2 rounded transition-colors ${
+				isOver
+					? "bg-blue-900/30 border-2 border-blue-500"
+					: "border-2 border-transparent"
+			}`}
 		>
 			{children}
 		</div>
@@ -71,7 +72,7 @@ function DraggableTask({
 	const { attributes, listeners, setNodeRef, transform, transition } =
 		useSortable({ id });
 
-	const style = {
+	const style: React.CSSProperties = {
 		transform: transform
 			? `translate3d(${transform.x}px, ${transform.y}px, 0)`
 			: undefined,
@@ -80,7 +81,6 @@ function DraggableTask({
 
 	return (
 		<div ref={setNodeRef} style={style} className="bg-gray-900 rounded p-3">
-			{/* Drag Handle */}
 			<div
 				{...listeners}
 				{...attributes}
@@ -88,7 +88,6 @@ function DraggableTask({
 			>
 				☰ Drag
 			</div>
-
 			{children}
 		</div>
 	);
@@ -110,59 +109,93 @@ export default function Dashboard() {
 	const [priorityFilter, setPriorityFilter] = useState<
 		Task["priority"] | "ALL"
 	>("ALL");
-
 	const [dueFilter, setDueFilter] = useState<
 		"ALL" | "OVERDUE" | "TODAY" | "FUTURE"
 	>("ALL");
 
+	// Guard so we only call socket.connect once per session
+	const socketConnectedRef = useRef(false);
+
+	// Initial load
 	useEffect(() => {
+		let cancelled = false;
 		const fetchTasks = async () => {
-			const res = await taskService.getTasks();
-			setTasks(res.data);
+			try {
+				const res = await taskService.getTasks();
+				if (!cancelled) setTasks(res.data);
+			} catch (err) {
+				console.error("Failed to fetch tasks", err);
+			}
 		};
 		fetchTasks();
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
+	// Socket event listeners (idempotent registration)
 	useEffect(() => {
-		socket.on("task:created", (task: Task) => {
+		const onTaskCreated = (task: Task) => {
 			setTasks((prev) => {
-				// 🔐 Prevent duplicate task
-				if (prev.some((t) => t._id === task._id)) {
-					return prev;
-				}
+				if (prev.some((t) => t._id === task._id)) return prev;
 				return [task, ...prev];
 			});
-		});
+		};
 
-		socket.on("task:updated", (task: Task) => {
+		const onTaskUpdated = (task: Task) => {
 			setTasks((prev) =>
 				prev.map((t) => (t._id === task._id ? task : t))
 			);
-		});
+		};
 
-		socket.on("task:deleted", (taskId: string) => {
+		const onTaskDeleted = (taskId: string) => {
 			setTasks((prev) => prev.filter((t) => t._id !== taskId));
-		});
+		};
+
+		// remove previous identical handlers (safe) then attach
+		socket.off("task:created", onTaskCreated);
+		socket.on("task:created", onTaskCreated);
+
+		socket.off("task:updated", onTaskUpdated);
+		socket.on("task:updated", onTaskUpdated);
+
+		socket.off("task:deleted", onTaskDeleted);
+		socket.on("task:deleted", onTaskDeleted);
 
 		return () => {
-			socket.off("task:created");
-			socket.off("task:updated");
-			socket.off("task:deleted");
+			socket.off("task:created", onTaskCreated);
+			socket.off("task:updated", onTaskUpdated);
+			socket.off("task:deleted", onTaskDeleted);
 		};
 	}, []);
 
-	// 🔌 Socket connection
+	// Connection management: connect once when user present, disconnect when user becomes null (logout)
 	useEffect(() => {
-		if (!user) return;
-
-		if (!socket.connected) {
-			socket.connect();
-			socket.emit("join:user", user.id);
-			console.log("🔌 Socket connected for user:", user.id);
+		if (!user) {
+			// ensure disconnect on logout / no user
+			if (socket.connected) {
+				socket.disconnect();
+				socketConnectedRef.current = false;
+				console.log("🔌 Socket disconnected (no user)");
+			}
+			return;
 		}
 
+		// If already connected in session or socket reports connected, re-join the room and skip connect
+		if (socketConnectedRef.current || socket.connected) {
+			socket.emit("join:user", user.id);
+			return;
+		}
+
+		// Connect and join
+		socket.connect();
+		socket.emit("join:user", user.id);
+		socketConnectedRef.current = true;
+		console.log("🔌 Socket connected for user:", user.id);
+
+		// Do not disconnect in cleanup to avoid Strict Mode toggle disconnects.
 		return () => {
-			socket.disconnect(); // ✅ full cleanup on unmount
+			// cleanup listeners here if created in this effect (we didn't)
 		};
 	}, [user]);
 
@@ -175,7 +208,6 @@ export default function Dashboard() {
 	// Create task
 	const handleCreateTask = async (e: React.FormEvent) => {
 		e.preventDefault();
-
 		if (!newTask.trim() || !dueDate || !user) return;
 
 		setLoading(true);
@@ -186,7 +218,7 @@ export default function Dashboard() {
 				dueDate: new Date(dueDate).toISOString(),
 				priority,
 			});
-
+			// server emits task:created -> listener will prepend task
 			setNewTask("");
 			setDueDate("");
 			setPriority("MEDIUM");
@@ -197,19 +229,15 @@ export default function Dashboard() {
 		}
 	};
 
-	// Delete Task
 	const handleDeleteTask = async (taskId: string) => {
 		try {
 			await taskService.deleteTask(taskId);
-
-			// Remove task from UI instantly
 			setTasks((prev) => prev.filter((task) => task._id !== taskId));
 		} catch (err) {
 			console.error("Failed to delete task", err);
 		}
 	};
 
-	// Update task status
 	const handleStatusChange = async (
 		taskId: string,
 		status: Task["status"]
@@ -230,7 +258,6 @@ export default function Dashboard() {
 	) => {
 		try {
 			const res = await taskService.updateTask(taskId, { priority });
-
 			setTasks((prev) =>
 				prev.map((task) => (task._id === taskId ? res.data : task))
 			);
@@ -246,52 +273,40 @@ export default function Dashboard() {
 		LOW: 4,
 	};
 
-	const dueDateRank = (dueDate: string) => {
+	const dueDateRank = (d: string) => {
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
-
-		const due = new Date(dueDate);
+		const due = new Date(d);
 		due.setHours(0, 0, 0, 0);
-
-		if (due < today) return 1; // overdue
-		if (due.getTime() === today.getTime()) return 2; // due today
-		return 3; // future
+		if (due < today) return 1;
+		if (due.getTime() === today.getTime()) return 2;
+		return 3;
 	};
 
 	const sortByDueDateAndPriority = (list: Task[]) =>
 		[...list].sort((a, b) => {
 			const dueDiff = dueDateRank(a.dueDate) - dueDateRank(b.dueDate);
 			if (dueDiff !== 0) return dueDiff;
-
 			return priorityRank[a.priority] - priorityRank[b.priority];
 		});
 
 	const applyFilters = (list: Task[]) => {
 		return list.filter((task) => {
-			// 🔍 Search filter
 			if (
 				searchTerm &&
 				!task.title.toLowerCase().includes(searchTerm.toLowerCase())
-			) {
+			)
 				return false;
-			}
-
-			// 🎯 Priority filter
-			if (priorityFilter !== "ALL" && task.priority !== priorityFilter) {
+			if (priorityFilter !== "ALL" && task.priority !== priorityFilter)
 				return false;
-			}
-
-			// 📅 Due-date filter
 			const rank = dueDateRank(task.dueDate);
 			if (dueFilter === "OVERDUE" && rank !== 1) return false;
 			if (dueFilter === "TODAY" && rank !== 2) return false;
 			if (dueFilter === "FUTURE" && rank !== 3) return false;
-
 			return true;
 		});
 	};
 
-	// group tasks by status
 	const groupedTasks = {
 		TODO: sortByDueDateAndPriority(
 			applyFilters(tasks.filter((t) => t.status === "TODO"))
@@ -307,28 +322,24 @@ export default function Dashboard() {
 		),
 	};
 
-	// OverDue
-	const isOverdue = (dueDate: string) => {
+	const isOverdue = (d: string) => {
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
-
-		const due = new Date(dueDate);
+		const due = new Date(d);
 		due.setHours(0, 0, 0, 0);
-
 		return due < today;
 	};
 
-	// DueDate
-	const isDueToday = (dueDate: string) => {
+	const isDueToday = (d: string) => {
 		const today = new Date();
-		const due = new Date(dueDate);
-
+		const due = new Date(d);
 		return (
 			today.getDate() === due.getDate() &&
 			today.getMonth() === due.getMonth() &&
 			today.getFullYear() === due.getFullYear()
 		);
 	};
+
 	const openTaskModal = (task: Task) => {
 		setSelectedTask(task);
 		setIsModalOpen(true);
@@ -339,8 +350,8 @@ export default function Dashboard() {
 		setIsModalOpen(false);
 	};
 
-	const priorityColor = (priority: Task["priority"]) => {
-		switch (priority) {
+	const priorityColor = (p: Task["priority"]) => {
+		switch (p) {
 			case "LOW":
 				return "bg-gray-600 text-white";
 			case "MEDIUM":
@@ -357,110 +368,96 @@ export default function Dashboard() {
 	const handleDragEnd = async (event: DragEndEvent) => {
 		const { active, over } = event;
 		setActiveTask(null);
-
 		if (!over) return;
 
 		const activeId = active.id as string;
 		const overId = over.id as string;
-
 		if (activeId === overId) return;
 
-		const activeTask = tasks.find((t) => t._id === activeId);
-		if (!activeTask) return;
+		const activeTaskObj = tasks.find((t) => t._id === activeId);
+		if (!activeTaskObj) return;
 
 		const overTask = tasks.find((t) => t._id === overId);
 
-		/* ===============================
-	   1️⃣ SAME COLUMN → REORDER
-	================================ */
-		if (overTask && activeTask.status === overTask.status) {
+		// 1) same column reorder
+		if (overTask && activeTaskObj.status === overTask.status) {
 			setTasks((prev) => {
 				const columnTasks = prev.filter(
-					(t) => t.status === activeTask.status
+					(t) => t.status === activeTaskObj.status
 				);
-
 				const oldIndex = columnTasks.findIndex(
 					(t) => t._id === activeId
 				);
 				const newIndex = columnTasks.findIndex((t) => t._id === overId);
-
 				const reordered = arrayMove(
 					columnTasks,
 					oldIndex,
 					newIndex
 				).map((t, i) => ({ ...t, position: i }));
 
-				// persist order (fire & forget)
-				reordered.forEach((t) => {
-					taskService.updateTask(t._id, { position: t.position });
-				});
+				// persist positions (fire & forget)
+				reordered.forEach((t) =>
+					taskService.updateTask(t._id, { position: t.position })
+				);
 
 				return prev.map((t) =>
-					t.status === activeTask.status
+					t.status === activeTaskObj.status
 						? reordered.find((r) => r._id === t._id) || t
 						: t
 				);
 			});
-
-			return; // ⛔ important: stop here
+			return;
 		}
 
-		/* ===============================
-	   2️⃣ MOVE TO DIFFERENT COLUMN
-	================================ */
+		// 2) move to different column
 		const targetStatus = overTask
 			? overTask.status
 			: (overId as Task["status"]);
-
 		if (
 			["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED"].includes(
 				targetStatus
 			) &&
-			activeTask.status !== targetStatus
+			activeTaskObj.status !== targetStatus
 		) {
-			// optimistic UI
 			setTasks((prev) =>
 				prev.map((t) =>
 					t._id === activeId ? { ...t, status: targetStatus } : t
 				)
 			);
-
-			// persist
-			await taskService.updateTaskStatus(activeId, targetStatus);
+			try {
+				await taskService.updateTaskStatus(activeId, targetStatus);
+			} catch (err) {
+				console.error("Failed to persist status change", err);
+			}
 		}
 	};
 
 	const sensors = useSensors(
-		useSensor(PointerSensor, {
-			activationConstraint: { distance: 8 },
-		}),
+		useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
 		useSensor(TouchSensor, {
 			activationConstraint: { delay: 200, tolerance: 5 },
 		})
 	);
 
 	const handleDragStart = (event: DragStartEvent) => {
-		const task = tasks.find((t) => t._id === event.active.id);
-		if (task) setActiveTask(task);
+		const t = tasks.find((x) => x._id === event.active.id);
+		if (t) setActiveTask(t);
 	};
 
 	const handleDragOver = (event: DragOverEvent) => {
 		const { active, over } = event;
 		if (!over) return;
-
 		const activeId = active.id as string;
 		const overId = over.id as string;
-
-		const task = tasks.find((t) => t._id === activeId);
-		if (!task) return;
-
+		const t = tasks.find((x) => x._id === activeId);
+		if (!t) return;
 		if (["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED"].includes(overId)) {
-			if (task.status !== overId) {
+			if (t.status !== overId) {
 				setTasks((prev) =>
-					prev.map((t) =>
-						t._id === activeId
-							? { ...t, status: overId as Task["status"] }
-							: t
+					prev.map((item) =>
+						item._id === activeId
+							? { ...item, status: overId as Task["status"] }
+							: item
 					)
 				);
 			}
@@ -538,7 +535,6 @@ export default function Dashboard() {
 						className="w-full sm:w-64 bg-gray-800 border border-gray-700 px-3 py-2 rounded text-sm"
 					/>
 
-					{/* Priority Filter */}
 					<select
 						value={priorityFilter}
 						onChange={(e) =>
@@ -555,7 +551,6 @@ export default function Dashboard() {
 						<option value="URGENT">URGENT</option>
 					</select>
 
-					{/* Due Date Filter */}
 					<select
 						value={dueFilter}
 						onChange={(e) =>
@@ -575,7 +570,6 @@ export default function Dashboard() {
 						<option value="FUTURE">Upcoming</option>
 					</select>
 
-					{/* Reset */}
 					<button
 						onClick={() => {
 							setPriorityFilter("ALL");
@@ -587,8 +581,6 @@ export default function Dashboard() {
 					</button>
 				</div>
 
-				{/* Tasks List */}
-				{/* Kanban Board */}
 				<DndContext
 					sensors={sensors}
 					collisionDetection={closestCenter}
@@ -648,9 +640,7 @@ export default function Dashboard() {
 															{task.title}
 														</p>
 
-														{/* Due date badge */}
 														<div className="flex items-center gap-2 mt-1">
-															{/* Due date badge */}
 															{task.status !==
 																"COMPLETED" && (
 																<span
@@ -680,7 +670,6 @@ export default function Dashboard() {
 																</span>
 															)}
 
-															{/* Priority badge */}
 															<span
 																className={`text-xs px-2 py-0.5 rounded ${priorityColor(
 																	task.priority
@@ -690,9 +679,7 @@ export default function Dashboard() {
 															</span>
 														</div>
 
-														{/* Actions */}
 														<div className="flex items-center justify-between gap-2 mt-2">
-															{/* Status dropdown */}
 															<select
 																value={
 																	task.status
@@ -720,7 +707,6 @@ export default function Dashboard() {
 																</option>
 															</select>
 
-															{/* Priority dropdown */}
 															<select
 																value={
 																	task.priority
@@ -768,13 +754,13 @@ export default function Dashboard() {
 							</div>
 						))}
 					</div>
+
 					<DragOverlay>
 						{activeTask ? (
 							<div className="bg-gray-900 rounded p-3 shadow-xl opacity-95">
 								<p className="text-sm font-medium">
 									{activeTask.title}
 								</p>
-
 								<div className="flex gap-2 mt-1">
 									<span
 										className={`text-xs px-2 py-0.5 rounded ${priorityColor(
@@ -788,12 +774,11 @@ export default function Dashboard() {
 						) : null}
 					</DragOverlay>
 				</DndContext>
-			</div>
 
-			{/* Task Modal */}
-			{isModalOpen && selectedTask && (
-				<TaskModal task={selectedTask} onClose={closeTaskModal} />
-			)}
+				{isModalOpen && selectedTask && (
+					<TaskModal task={selectedTask} onClose={closeTaskModal} />
+				)}
+			</div>
 		</div>
 	);
 }
