@@ -8,18 +8,19 @@ export interface AuthRequest extends Request {
 	};
 }
 
-export const authenticate = (
+export const authMiddleware = (
 	req: AuthRequest,
 	res: Response,
 	next: NextFunction
 ) => {
-	const token = req.cookies?.token;
-
-	if (!token) {
-		return res.status(401).json({ message: "Unauthorized" });
-	}
-
 	try {
+		const token =
+			req.cookies?.token || req.headers.authorization?.split(" ")[1];
+
+		if (!token) {
+			return res.status(401).json({ message: "Unauthorized" });
+		}
+
 		const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
 			id: string;
 			email: string;
@@ -27,7 +28,7 @@ export const authenticate = (
 
 		req.user = decoded;
 		next();
-	} catch {
+	} catch (error) {
 		return res.status(401).json({ message: "Invalid token" });
 	}
 };
