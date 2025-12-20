@@ -8,7 +8,7 @@ export interface AuthRequest extends Request {
 	};
 }
 
-export const authMiddleware = (
+export const authenticate = (
 	req: AuthRequest,
 	res: Response,
 	next: NextFunction
@@ -26,9 +26,13 @@ export const authMiddleware = (
 			email: string;
 		};
 
-		req.user = decoded;
+		req.user = {
+			id: decoded.id,
+			email: decoded.email,
+		};
+
 		next();
-	} catch (error) {
-		return res.status(401).json({ message: "Invalid token" });
+	} catch (err) {
+		return res.status(401).json({ message: "Unauthorized" });
 	}
 };
