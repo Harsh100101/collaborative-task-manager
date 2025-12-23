@@ -6,8 +6,7 @@ AbleSpace is a **full‑stack collaborative task management system** designed to
 
 ## Live Demo
 
-* **Frontend (Vercel):** [https://collaborative-task-manager.vercel.app](https://collaborative-task-manager.vercel.app)
-* **Backend (Render):** [https://collaborative-task-manager-alpha.vercel.app](https://collaborative-task-manager-alpha.vercel.app)
+* **Frontend (Vercel):**[https://collaborative-task-manager-alpha.vercel.app](https://collaborative-task-manager-alpha.vercel.app)
 
 ---
 
